@@ -1,18 +1,14 @@
-// API Route (JavaScript/TypeScript)
 import { generateText } from "ai"
 import { groq } from "@ai-sdk/groq"
 
 export async function POST(req: Request) {
   try {
-    // Get message from request
     const { message } = await req.json()
 
-    // Validate input
     if (!message) {
       return Response.json({ error: "No message provided" }, { status: 400 })
     }
 
-    // Call AI
     const { text } = await generateText({
       model: groq("llama-3.1-8b-instant"),
       prompt: `You are a medical assistant AI. 
@@ -30,10 +26,8 @@ Keep responses under 100 words.`,
       maxTokens: 150,
     })
 
-    // Return response
     return Response.json({ response: text })
   } catch (error) {
-    // Handle errors
     return Response.json(
       {
         error: "Failed to get AI response",
