@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import "./styles.css"
 
 interface Message {
@@ -10,6 +10,16 @@ interface Message {
   content: string
   isEmergency?: boolean
   isFalseAlarm?: boolean
+  severity?: "low" | "medium" | "high"
+  timestamp: number
+}
+
+interface SymptomEntry {
+  id: string
+  symptom: string
+  severity?: "low" | "medium" | "high"
+  timestamp: number
+  response: string
 }
 
 export default function MedAI() {
@@ -17,8 +27,28 @@ export default function MedAI() {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+  const [loadingProgress, setLoadingProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [showEmergencyAlert, setShowEmergencyAlert] = useState(false)
+  const [symptomHistory, setSymptomHistory] = useState<SymptomEntry[]>([])
+  const [showHistory, setShowHistory] = useState(false)
+
+  // Load symptom history from localStorage on component mount
+  useEffect(() => {
+    const savedHistory = localStorage.getItem("medai-symptom-history")
+    if (savedHistory) {
+      try {
+        setSymptomHistory(JSON.parse(savedHistory))
+      } catch (error) {
+        console.error("Error loading symptom history:", error)
+      }
+    }
+  }, [])
+
+  // Save symptom history to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem("medai-symptom-history", JSON.stringify(symptomHistory))
+  }, [symptomHistory])
 
   // Emergency keywords detection
   const emergencyKeywords = [
@@ -87,6 +117,21 @@ export default function MedAI() {
     return falseAlarmKeywords.some((keyword) => lowerText.includes(keyword))
   }
 
+  // Progress indicator simulation
+  const simulateProgress = () => {
+    setLoadingProgress(0)
+    const interval = setInterval(() => {
+      setLoadingProgress((prev) => {
+        if (prev >= 90) {
+          clearInterval(interval)
+          return 90
+        }
+        return prev + Math.random() * 15
+      })
+    }, 200)
+    return interval
+  }
+
   // React Functions
   const sendMessage = async (messageText: string) => {
     if (!messageText.trim() || isLoading) return
@@ -109,12 +154,16 @@ export default function MedAI() {
       content: messageText,
       isEmergency,
       isFalseAlarm,
+      timestamp: Date.now(),
     }
 
     setMessages((prev) => [...prev, userMessage])
     setInput("")
     setIsLoading(true)
     setError(null)
+
+    // Start progress indicator
+    const progressInterval = simulateProgress()
 
     try {
       const response = await fetch("/api/chat", {
@@ -139,18 +188,39 @@ export default function MedAI() {
           content: data.response,
           isEmergency: data.isEmergency,
           isFalseAlarm: data.isFalseAlarm,
+          severity: data.severity,
+          timestamp: Date.now(),
         }
         setMessages((prev) => [...prev, assistantMessage])
+
+        // Add to symptom history (only for non-emergency, non-greeting messages)
+        if (!data.isEmergency && !data.isFalseAlarm && messageText.length > 10) {
+          const newSymptomEntry: SymptomEntry = {
+            id: Date.now().toString(),
+            symptom: messageText,
+            severity: data.severity,
+            timestamp: Date.now(),
+            response: data.response,
+          }
+          setSymptomHistory((prev) => [newSymptomEntry, ...prev.slice(0, 49)]) // Keep last 50 entries
+        }
 
         // If it's a false alarm response, dismiss emergency alert
         if (data.isFalseAlarm) {
           setShowEmergencyAlert(false)
         }
       }
+
+      // Complete progress
+      setLoadingProgress(100)
+      setTimeout(() => setLoadingProgress(0), 500)
     } catch (error) {
       setError(error instanceof Error ? error.message : "Failed to get response")
+      clearInterval(progressInterval)
+      setLoadingProgress(0)
     } finally {
       setIsLoading(false)
+      clearInterval(progressInterval)
     }
   }
 
@@ -163,16 +233,65 @@ export default function MedAI() {
     setShowEmergencyAlert(false)
   }
 
+  const clearHistory = () => {
+    setSymptomHistory([])
+    localStorage.removeItem("medai-symptom-history")
+  }
+
+  const getSeverityColor = (severity?: string) => {
+    switch (severity) {
+      case "high":
+        return "severity-high"
+      case "medium":
+        return "severity-medium"
+      case "low":
+        return "severity-low"
+      default:
+        return ""
+    }
+  }
+
+  const getSeverityIcon = (severity?: string) => {
+    switch (severity) {
+      case "high":
+        return "🔴"
+      case "medium":
+        return "🟡"
+      case "low":
+        return "🟢"
+      default:
+        return "🤖"
+    }
+  }
+
+  // Enhanced examples with more diversity
   const examples = [
-    "I have a severe headache",
+    "I have a severe headache with nausea",
     "My chest hurts when I breathe",
-    "I have a persistent cough",
-    "I have diabetes",
+    "I have a persistent cough for 2 weeks",
+    "I have diabetes and feel dizzy",
+    "Burning sensation when I urinate",
+    "I'm having anxiety and panic attacks",
+    "Severe allergic reaction to food",
+    "Migraine with visual disturbances",
+    "I have Hashimoto's thyroiditis",
+    "Stomach pain after eating",
+    "I can't sleep and feel depressed",
+    "Rash on my arms and legs",
   ]
 
   // HTML Structure (JSX)
   return (
     <div className="container">
+      {/* Progress Bar */}
+      {isLoading && loadingProgress > 0 && (
+        <div className="progress-container">
+          <div className="progress-bar" style={{ width: `${loadingProgress}%` }}>
+            <span className="progress-text">Analyzing symptoms... {Math.round(loadingProgress)}%</span>
+          </div>
+        </div>
+      )}
+
       {/* Emergency Alert */}
       {showEmergencyAlert && (
         <div className="emergency-alert">
@@ -204,9 +323,40 @@ export default function MedAI() {
         <div className="header-content">
           <div className="header-icon">🏥</div>
           <h1 className="header-title">MedAI</h1>
+          <button onClick={() => setShowHistory(!showHistory)} className="history-toggle">
+            📊 History
+          </button>
         </div>
         <p className="header-subtitle">Your AI-powered medical assistant for symptom analysis and health guidance</p>
       </header>
+
+      {/* Symptom History */}
+      {showHistory && (
+        <div className="history-container">
+          <div className="history-header">
+            <h3 className="history-title">📊 Symptom History</h3>
+            <button onClick={clearHistory} className="clear-history-btn">
+              🗑️ Clear
+            </button>
+          </div>
+          {symptomHistory.length === 0 ? (
+            <p className="history-empty">No symptom history yet. Start chatting to track your symptoms over time.</p>
+          ) : (
+            <div className="history-list">
+              {symptomHistory.slice(0, 10).map((entry) => (
+                <div key={entry.id} className={`history-item ${getSeverityColor(entry.severity)}`}>
+                  <div className="history-item-header">
+                    <span className="history-severity">{getSeverityIcon(entry.severity)}</span>
+                    <span className="history-date">{new Date(entry.timestamp).toLocaleDateString()}</span>
+                  </div>
+                  <div className="history-symptom">{entry.symptom}</div>
+                  <div className="history-response">{entry.response.substring(0, 100)}...</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Error Alert */}
       {error && (
@@ -222,6 +372,34 @@ export default function MedAI() {
         <span className="alert-text">
           MedAI provides general health information only. Always consult healthcare professionals for medical advice.
         </span>
+      </div>
+
+      {/* Urgency Guide */}
+      <div className="urgency-guide">
+        <h3 className="urgency-title">🚦 When to Seek Care</h3>
+        <div className="urgency-levels">
+          <div className="urgency-level emergency-level">
+            <span className="urgency-icon">🔴</span>
+            <div className="urgency-content">
+              <strong>CALL 911 NOW</strong>
+              <p>Breathing problems, chest pain, severe bleeding, unconscious</p>
+            </div>
+          </div>
+          <div className="urgency-level urgent-level">
+            <span className="urgency-icon">🟡</span>
+            <div className="urgency-content">
+              <strong>Urgent Care (Same Day)</strong>
+              <p>High fever, severe pain, persistent vomiting, concerning symptoms</p>
+            </div>
+          </div>
+          <div className="urgency-level routine-level">
+            <span className="urgency-icon">🟢</span>
+            <div className="urgency-content">
+              <strong>Schedule Appointment</strong>
+              <p>Mild symptoms, routine check-ups, ongoing conditions</p>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Chat Box */}
@@ -246,10 +424,16 @@ export default function MedAI() {
               key={message.id}
               className={`message ${message.role} ${message.isEmergency ? "emergency" : ""} ${
                 message.isFalseAlarm ? "false-alarm" : ""
-              }`}
+              } ${getSeverityColor(message.severity)}`}
             >
               <div className="message-avatar">
-                {message.role === "user" ? "👤" : message.isEmergency ? "🚨" : message.isFalseAlarm ? "😅" : "🤖"}
+                {message.role === "user"
+                  ? "👤"
+                  : message.isEmergency
+                    ? "🚨"
+                    : message.isFalseAlarm
+                      ? "😅"
+                      : getSeverityIcon(message.severity)}
               </div>
               <div className="message-content">
                 {message.isEmergency && message.role === "assistant" && (
@@ -258,7 +442,13 @@ export default function MedAI() {
                 {message.isFalseAlarm && message.role === "assistant" && (
                   <div className="message-false-alarm-badge">😅 False Alarm Detected</div>
                 )}
+                {message.severity && message.role === "assistant" && (
+                  <div className={`message-severity-badge ${getSeverityColor(message.severity)}`}>
+                    {getSeverityIcon(message.severity)} {message.severity.toUpperCase()} PRIORITY
+                  </div>
+                )}
                 {message.content}
+                <div className="message-timestamp">{new Date(message.timestamp).toLocaleTimeString()}</div>
               </div>
             </div>
           ))}
@@ -269,7 +459,7 @@ export default function MedAI() {
               <div className="message-avatar">🤖</div>
               <div className="message-content loading">
                 <div className="spinner"></div>
-                <span>MedAI is analyzing...</span>
+                <span>MedAI is analyzing your symptoms...</span>
               </div>
             </div>
           )}
@@ -291,9 +481,9 @@ export default function MedAI() {
         </form>
       </div>
 
-      {/* Quick Examples */}
+      {/* Enhanced Examples */}
       <div className="examples-container">
-        <h3 className="examples-title">Try These Examples</h3>
+        <h3 className="examples-title">💡 Try These Examples</h3>
         <div className="examples-grid">
           {examples.map((example, index) => (
             <button key={index} onClick={() => sendMessage(example)} disabled={isLoading} className="example-button">

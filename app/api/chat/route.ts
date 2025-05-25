@@ -74,8 +74,57 @@ export async function POST(req: Request) {
       return falseAlarmKeywords.some((keyword) => lowerText.includes(keyword))
     }
 
+    // Determine severity based on keywords
+    const determineSeverity = (text: string): "low" | "medium" | "high" => {
+      const lowerText = text.toLowerCase()
+
+      // High severity keywords
+      const highSeverityKeywords = [
+        "severe",
+        "intense",
+        "unbearable",
+        "excruciating",
+        "emergency",
+        "can't",
+        "cannot",
+        "blood",
+        "bleeding",
+        "unconscious",
+        "chest pain",
+        "heart attack",
+        "stroke",
+        "allergic reaction",
+      ]
+
+      // Medium severity keywords
+      const mediumSeverityKeywords = [
+        "moderate",
+        "persistent",
+        "concerning",
+        "worsening",
+        "fever",
+        "pain",
+        "difficulty",
+        "trouble",
+        "nausea",
+        "vomiting",
+        "dizzy",
+        "headache",
+        "migraine",
+      ]
+
+      if (highSeverityKeywords.some((keyword) => lowerText.includes(keyword))) {
+        return "high"
+      } else if (mediumSeverityKeywords.some((keyword) => lowerText.includes(keyword))) {
+        return "medium"
+      } else {
+        return "low"
+      }
+    }
+
     const isFalseAlarm = detectFalseAlarm(message)
     const isEmergencyDetected = isEmergency || detectEmergency(message)
+    const severity = determineSeverity(message)
 
     let prompt = ""
 
@@ -122,7 +171,7 @@ Respond as MedAI and ask how you can help with their health concerns.
 
 Keep response under 30 words.`
       } else {
-        // Main medical response - simplified, no follow-up questions
+        // Enhanced medical response with more conditions
         prompt = `You are MedAI. The user said: "${message}"
 
 Provide medical information in this format:
@@ -134,36 +183,56 @@ Provide medical information in this format:
 - [2-3 specific management recommendations]
 
 **When to see a doctor:**
-- [2-3 specific warning signs or situations]
+- [2-3 specific warning signs with clear urgency levels]
 
-CONDITION KNOWLEDGE:
+EXPANDED CONDITION KNOWLEDGE:
 
-HASHIMOTO'S: Autoimmune thyroid disorder. Management: Daily levothyroxine, consistent timing. See doctor: Severe fatigue, rapid weight changes, heart palpitations.
+HASHIMOTO'S: Autoimmune thyroid disorder causing hypothyroidism. Management: Daily levothyroxine, consistent timing, avoid soy/calcium. See doctor: Severe fatigue, rapid weight changes, heart palpitations.
 
-DIABETES: Type 1 (autoimmune), Type 2 (insulin resistance). Management: Blood sugar monitoring, medication compliance, exercise. See doctor: Blood sugar >300, ketones, vision changes.
+DIABETES: Type 1 (autoimmune), Type 2 (insulin resistance). Management: Blood sugar monitoring, medication compliance, exercise, carb counting. See doctor: Blood sugar >300, ketones, vision changes, frequent infections.
 
-ASTHMA: Chronic airway inflammation. Management: Daily controller inhaler, rescue inhaler, avoid triggers. See doctor: Using rescue inhaler >2x/week, severe attacks.
+ASTHMA: Chronic airway inflammation. Management: Daily controller inhaler, rescue inhaler, avoid triggers, peak flow monitoring. See doctor: Using rescue inhaler >2x/week, severe attacks, night symptoms.
 
-HYPERTENSION: Often no symptoms until severe. Management: DASH diet, limit sodium, exercise, medication. See doctor: BP >180/120, severe headaches, chest pain.
+HYPERTENSION: Often no symptoms until severe. Management: DASH diet, limit sodium, exercise, medication compliance. See doctor: BP >180/120, severe headaches, chest pain, vision problems.
 
-CHEST PAIN: Could be costochondritis, pneumonia, heart issues. Management: Rest, warm compress, avoid strain. See doctor: Severe pain, shortness of breath, radiating pain.
+MIGRAINE: Severe headaches with neurological symptoms. Triggers: stress, foods, hormones, weather. Management: Avoid triggers, dark quiet room, prescribed medications. See doctor: Sudden severe headache, vision changes, fever with headache.
+
+UTI (Urinary Tract Infection): Bacterial infection of urinary system. Symptoms: burning urination, frequent urination, pelvic pain. Management: Drink lots of water, cranberry juice, complete antibiotic course. See doctor: Blood in urine, fever, back pain, symptoms worsen.
+
+ALLERGIES: Immune system overreaction to substances. Types: food, environmental, drug allergies. Management: Avoid allergens, antihistamines, epinephrine for severe reactions. See doctor: Difficulty breathing, swelling, severe reactions, new allergies.
+
+ANXIETY: Mental health condition with excessive worry/fear. Symptoms: racing heart, sweating, panic attacks, restlessness. Management: Deep breathing, exercise, therapy, medication if needed. See doctor: Panic attacks, can't function daily, thoughts of self-harm.
+
+CHEST PAIN: Could be costochondritis, pneumonia, heart issues, GERD. Management: Rest, warm compress, avoid strain, antacids for GERD. See doctor: Severe pain, shortness of breath, radiating pain to arm/jaw.
+
+DEPRESSION: Mental health disorder affecting mood, energy, interest. Symptoms: sadness, hopelessness, fatigue, sleep changes. Management: Therapy, medication, exercise, social support. See doctor: Thoughts of self-harm, can't function, symptoms persist >2 weeks.
+
+STOMACH PAIN: Could be gastritis, food poisoning, appendicitis, IBS. Management: Bland diet, hydration, avoid irritants. See doctor: Severe pain, fever, vomiting blood, pain in lower right abdomen.
+
+RASH: Could be eczema, allergic reaction, infection, autoimmune. Management: Keep clean/dry, avoid irritants, moisturize, antihistamines. See doctor: Spreading rapidly, fever, blistering, severe itching.
+
+For urgency levels, specify:
+- 🔴 CALL 911 NOW: Life-threatening symptoms
+- 🟡 URGENT CARE (Same Day): Concerning symptoms that need prompt attention
+- 🟢 SCHEDULE APPOINTMENT: Routine symptoms that can wait for regular appointment
 
 Do NOT ask follow-up questions. Give direct medical information.
 
-Keep response under 120 words.`
+Keep response under 150 words.`
       }
     }
 
     const { text } = await generateText({
       model: groq("llama-3.1-8b-instant"),
       prompt,
-      maxTokens: 200,
+      maxTokens: 250,
     })
 
     return Response.json({
       response: text,
       isEmergency: isEmergencyDetected,
       isFalseAlarm,
+      severity: isEmergencyDetected ? "high" : severity,
     })
   } catch (error) {
     return Response.json(
