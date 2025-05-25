@@ -19,7 +19,7 @@ interface FollowUpQuestion {
   answer?: string
 }
 
-export default function HealthChatbot() {
+export default function MedAI() {
   // React State
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
@@ -229,10 +229,10 @@ export default function HealthChatbot() {
       {/* Header */}
       <header className="header">
         <div className="header-content">
-          <div className="header-icon">❤️</div>
-          <h1 className="header-title">AI Health Assistant</h1>
+          <div className="header-icon">🏥</div>
+          <h1 className="header-title">MedAI</h1>
         </div>
-        <p className="header-subtitle">Describe your symptoms for AI-powered health guidance</p>
+        <p className="header-subtitle">Your AI-powered medical assistant for symptom analysis and health guidance</p>
       </header>
 
       {/* Error Alert */}
@@ -247,7 +247,7 @@ export default function HealthChatbot() {
       <div className="alert alert-warning">
         <span className="alert-icon">⚠️</span>
         <span className="alert-text">
-          This AI provides general health information only. Always consult healthcare professionals for medical advice.
+          MedAI provides general health information only. Always consult healthcare professionals for medical advice.
         </span>
       </div>
 
@@ -283,7 +283,7 @@ export default function HealthChatbot() {
       <div className="chat-container">
         <div className="chat-header">
           <span className="chat-icon">💬</span>
-          <h2 className="chat-title">Chat with AI Health Assistant</h2>
+          <h2 className="chat-title">Chat with MedAI</h2>
         </div>
 
         {/* Messages */}
@@ -292,6 +292,7 @@ export default function HealthChatbot() {
             <div className="empty-state">
               <div className="empty-icon">🤖</div>
               <p className="empty-text">Start by describing your symptoms...</p>
+              <p className="empty-subtext">MedAI will analyze and provide helpful guidance</p>
             </div>
           )}
 
@@ -324,7 +325,7 @@ export default function HealthChatbot() {
               <div className="message-avatar">🤖</div>
               <div className="message-content loading">
                 <div className="spinner"></div>
-                <span>AI is analyzing...</span>
+                <span>MedAI is analyzing...</span>
               </div>
             </div>
           )}
@@ -359,6 +360,11 @@ export default function HealthChatbot() {
           ))}
         </div>
       </div>
+
+      {/* Footer */}
+      <footer className="footer">
+        <p className="footer-text">© 2024 MedAI - Powered by AI for better health insights</p>
+      </footer>
     </div>
   )
 }
