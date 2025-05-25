@@ -3,7 +3,7 @@ import { groq } from "@ai-sdk/groq"
 
 export async function POST(req: Request) {
   try {
-    const { message, isEmergency, followUpQuestions, isFollowUpMode } = await req.json()
+    const { message, isEmergency } = await req.json()
 
     if (!message) {
       return Response.json({ error: "No message provided" }, { status: 400 })
@@ -11,14 +11,27 @@ export async function POST(req: Request) {
 
     // Emergency keywords for detection
     const emergencyKeywords = [
-      "chest pain",
       "can't breathe",
+      "cannot breathe",
+      "can not breathe",
+      "canot breath",
+      "canot breathe",
+      "cant breath",
+      "cant breathe",
+      "i cannot breath",
+      "i canot breath",
+      "i cant breath",
       "difficulty breathing",
+      "trouble breathing",
+      "hard to breathe",
+      "struggling to breathe",
+      "gasping",
+      "choking",
+      "chest pain",
       "severe bleeding",
       "unconscious",
       "heart attack",
       "stroke",
-      "choking",
       "severe burn",
       "poisoning",
       "overdose",
@@ -27,6 +40,9 @@ export async function POST(req: Request) {
       "head injury",
       "suicide",
       "self harm",
+      "dying",
+      "help me",
+      "emergency",
     ]
 
     // False alarm keywords
@@ -49,7 +65,7 @@ export async function POST(req: Request) {
     ]
 
     const detectEmergency = (text: string): boolean => {
-      const lowerText = text.toLowerCase()
+      const lowerText = text.toLowerCase().replace(/[^a-z\s]/g, " ")
       return emergencyKeywords.some((keyword) => lowerText.includes(keyword))
     }
 
@@ -59,65 +75,82 @@ export async function POST(req: Request) {
     }
 
     const isFalseAlarm = detectFalseAlarm(message)
-    const isEmergencyDetected = isEmergency || (detectEmergency(message) && !isFalseAlarm)
+    const isEmergencyDetected = isEmergency || detectEmergency(message)
 
     let prompt = ""
 
     if (isFalseAlarm) {
       prompt = `The user said: "${message}"
 
-This appears to be someone saying they were joking or not serious about a previous message. Respond in a friendly, understanding way. Maybe give a gentle reminder about not joking about medical emergencies, but keep it light and friendly.
+This appears to be someone saying they were joking. Respond in a friendly way and remind them not to joke about medical emergencies.
 
 Keep response under 50 words.`
     } else if (isEmergencyDetected) {
-      prompt = `EMERGENCY MEDICAL SITUATION DETECTED.
+      prompt = `🚨🚨🚨 CRITICAL MEDICAL EMERGENCY 🚨🚨🚨
 
 User message: "${message}"
-${followUpQuestions ? `Additional info: ${followUpQuestions}` : ""}
 
-Provide:
-1. Immediate emergency actions (call 911, first aid steps)
-2. What NOT to do
-3. How to stay safe until help arrives
+This person has a life-threatening emergency.
 
-Keep response under 150 words. Be direct and clear.`
-    } else if (isFollowUpMode) {
-      prompt = `You are a medical assistant. Based on the initial symptoms and follow-up answers, provide a comprehensive analysis.
+RESPOND WITH URGENT EMERGENCY INSTRUCTIONS:
 
-User message: "${message}"
-Follow-up information: ${followUpQuestions}
+🚨 **CALL 911 IMMEDIATELY** - This is a medical emergency
+📞 **Emergency Services NOW** - Don't wait
+🆘 **Immediate Actions:**
+- Sit upright, lean forward
+- Loosen tight clothing
+- Stay calm, breathe slowly
+- Don't lie down
 
-Provide:
-- Updated possible causes based on all information
-- Specific care recommendations
-- When to seek medical help
-- Any warning signs
+⚠️ **What NOT to do:**
+- Don't panic
+- Don't leave them alone
+- Don't give food/water
 
-Keep response under 150 words.`
+This is LIFE-THREATENING. Use urgent language.
+
+Keep response under 150 words but be URGENT and DIRECT.`
     } else {
-      // Check if it's a greeting or casual conversation
-      const casualKeywords = ["hello", "hi", "hey", "good morning", "good afternoon", "good evening", "how are you"]
-      const isCasual = casualKeywords.some((keyword) => message.toLowerCase().includes(keyword))
+      // Check if it's a simple greeting
+      const simpleGreetings = ["hello", "hi", "hey"]
+      const isSimpleGreeting = simpleGreetings.some((greeting) => message.toLowerCase().trim() === greeting)
 
-      if (isCasual || message.length < 10) {
+      if (isSimpleGreeting) {
         prompt = `The user said: "${message}"
 
-This appears to be a greeting or casual conversation. Respond as a friendly medical assistant and ask how you can help with their health concerns today.
+Respond as MedAI and ask how you can help with their health concerns.
 
-Keep response under 50 words.`
+Keep response under 30 words.`
       } else {
-        prompt = `You are a medical assistant AI. 
+        // Main medical response - simplified, no follow-up questions
+        prompt = `You are MedAI. The user said: "${message}"
 
-User message: "${message}"
+Provide medical information in this format:
 
-If this describes symptoms, provide:
-1. 2-3 possible causes
-2. Basic care tips
-3. When to see a doctor
+**About the condition/Possible causes:**
+- [2-3 specific points about the condition or causes]
 
-Then ask 2-3 relevant follow-up questions to better understand the symptoms (like duration, severity, associated symptoms).
+**Management/Care tips:**
+- [2-3 specific management recommendations]
 
-Keep response under 100 words.`
+**When to see a doctor:**
+- [2-3 specific warning signs or situations]
+
+CONDITION KNOWLEDGE:
+
+HASHIMOTO'S: Autoimmune thyroid disorder. Management: Daily levothyroxine, consistent timing. See doctor: Severe fatigue, rapid weight changes, heart palpitations.
+
+DIABETES: Type 1 (autoimmune), Type 2 (insulin resistance). Management: Blood sugar monitoring, medication compliance, exercise. See doctor: Blood sugar >300, ketones, vision changes.
+
+ASTHMA: Chronic airway inflammation. Management: Daily controller inhaler, rescue inhaler, avoid triggers. See doctor: Using rescue inhaler >2x/week, severe attacks.
+
+HYPERTENSION: Often no symptoms until severe. Management: DASH diet, limit sodium, exercise, medication. See doctor: BP >180/120, severe headaches, chest pain.
+
+CHEST PAIN: Could be costochondritis, pneumonia, heart issues. Management: Rest, warm compress, avoid strain. See doctor: Severe pain, shortness of breath, radiating pain.
+
+Do NOT ask follow-up questions. Give direct medical information.
+
+Keep response under 120 words.`
       }
     }
 
@@ -127,78 +160,9 @@ Keep response under 100 words.`
       maxTokens: 200,
     })
 
-    // Generate follow-up questions for non-emergency symptoms
-    let followUpQuestions_generated: string[] = []
-    let hasFollowUp = false
-
-    if (!isEmergencyDetected && !isFollowUpMode && !isFalseAlarm && message.length > 10) {
-      // Check if this is actually a symptom description
-      const symptomIndicators = [
-        "pain",
-        "hurt",
-        "ache",
-        "feel",
-        "sick",
-        "nausea",
-        "fever",
-        "cough",
-        "headache",
-        "dizzy",
-        "tired",
-        "swollen",
-        "rash",
-        "bleeding",
-        "burning",
-        "itchy",
-      ]
-
-      const hasSymptoms = symptomIndicators.some((indicator) => message.toLowerCase().includes(indicator))
-
-      if (hasSymptoms) {
-        // Generate follow-up questions based on the symptom
-        const followUpPrompt = `Based on this symptom: "${message}"
-
-Generate 2-3 specific follow-up questions to better understand the condition. Format as a simple array.
-
-Examples:
-- "How long have you had this symptom?"
-- "Is the pain constant or does it come and go?"
-- "Do you have any fever?"
-- "Does anything make it better or worse?"
-
-Return only the questions, one per line.`
-
-        try {
-          const followUpResponse = await generateText({
-            model: groq("llama-3.1-8b-instant"),
-            prompt: followUpPrompt,
-            maxTokens: 100,
-          })
-
-          followUpQuestions_generated = followUpResponse.text
-            .split("\n")
-            .filter((line) => line.trim().length > 0)
-            .map((line) =>
-              line
-                .replace(/^[-*•]\s*/, "")
-                .replace(/^\d+\.\s*/, "")
-                .trim(),
-            )
-            .filter((line) => line.endsWith("?"))
-            .slice(0, 3)
-
-          hasFollowUp = followUpQuestions_generated.length > 0
-        } catch (error) {
-          console.error("Error generating follow-up questions:", error)
-        }
-      }
-    }
-
     return Response.json({
       response: text,
       isEmergency: isEmergencyDetected,
-      hasFollowUp,
-      followUpQuestions: followUpQuestions_generated,
       isFalseAlarm,
     })
   } catch (error) {

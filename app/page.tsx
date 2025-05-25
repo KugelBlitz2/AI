@@ -9,14 +9,7 @@ interface Message {
   role: "user" | "assistant"
   content: string
   isEmergency?: boolean
-  isFollowUp?: boolean
   isFalseAlarm?: boolean
-}
-
-interface FollowUpQuestion {
-  question: string
-  answered: boolean
-  answer?: string
 }
 
 export default function MedAI() {
@@ -26,19 +19,30 @@ export default function MedAI() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showEmergencyAlert, setShowEmergencyAlert] = useState(false)
-  const [followUpQuestions, setFollowUpQuestions] = useState<FollowUpQuestion[]>([])
-  const [isInFollowUpMode, setIsInFollowUpMode] = useState(false)
 
   // Emergency keywords detection
   const emergencyKeywords = [
-    "chest pain",
     "can't breathe",
+    "cannot breathe",
+    "can not breathe",
+    "canot breath",
+    "canot breathe",
+    "cant breath",
+    "cant breathe",
+    "i cannot breath",
+    "i canot breath",
+    "i cant breath",
     "difficulty breathing",
+    "trouble breathing",
+    "hard to breathe",
+    "struggling to breathe",
+    "gasping",
+    "choking",
+    "chest pain",
     "severe bleeding",
     "unconscious",
     "heart attack",
     "stroke",
-    "choking",
     "severe burn",
     "poisoning",
     "overdose",
@@ -47,6 +51,9 @@ export default function MedAI() {
     "head injury",
     "suicide",
     "self harm",
+    "dying",
+    "help me",
+    "emergency",
   ]
 
   // False alarm keywords
@@ -115,12 +122,7 @@ export default function MedAI() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: messageText,
-          isEmergency,
-          followUpQuestions: followUpQuestions
-            .filter((q) => q.answered)
-            .map((q) => `${q.question}: ${q.answer}`)
-            .join(", "),
-          isInFollowUpMode,
+          isEmergency: isEmergency,
         }),
       })
 
@@ -136,23 +138,9 @@ export default function MedAI() {
           role: "assistant",
           content: data.response,
           isEmergency: data.isEmergency,
-          isFollowUp: data.hasFollowUp,
           isFalseAlarm: data.isFalseAlarm,
         }
         setMessages((prev) => [...prev, assistantMessage])
-
-        // Handle follow-up questions
-        if (data.followUpQuestions && data.followUpQuestions.length > 0) {
-          setFollowUpQuestions(
-            data.followUpQuestions.map((q: string) => ({
-              question: q,
-              answered: false,
-            })),
-          )
-          setIsInFollowUpMode(true)
-        } else {
-          setIsInFollowUpMode(false)
-        }
 
         // If it's a false alarm response, dismiss emergency alert
         if (data.isFalseAlarm) {
@@ -166,21 +154,6 @@ export default function MedAI() {
     }
   }
 
-  const answerFollowUp = (questionIndex: number, answer: string) => {
-    const updatedQuestions = [...followUpQuestions]
-    updatedQuestions[questionIndex].answered = true
-    updatedQuestions[questionIndex].answer = answer
-    setFollowUpQuestions(updatedQuestions)
-
-    // Send the answer as a message
-    sendMessage(`${updatedQuestions[questionIndex].question} ${answer}`)
-
-    // Check if all questions are answered
-    if (updatedQuestions.every((q) => q.answered)) {
-      setIsInFollowUpMode(false)
-    }
-  }
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     sendMessage(input)
@@ -191,10 +164,10 @@ export default function MedAI() {
   }
 
   const examples = [
-    "I have a massive bulge in my arm",
     "I have a severe headache",
     "My chest hurts when I breathe",
     "I have a persistent cough",
+    "I have diabetes",
   ]
 
   // HTML Structure (JSX)
@@ -251,34 +224,6 @@ export default function MedAI() {
         </span>
       </div>
 
-      {/* Follow-up Questions */}
-      {isInFollowUpMode && followUpQuestions.some((q) => !q.answered) && (
-        <div className="followup-container">
-          <h3 className="followup-title">🎯 Help me understand better:</h3>
-          <div className="followup-questions">
-            {followUpQuestions.map(
-              (q, index) =>
-                !q.answered && (
-                  <div key={index} className="followup-question">
-                    <p className="followup-text">{q.question}</p>
-                    <div className="followup-buttons">
-                      <button onClick={() => answerFollowUp(index, "Yes")} className="followup-btn followup-yes">
-                        Yes
-                      </button>
-                      <button onClick={() => answerFollowUp(index, "No")} className="followup-btn followup-no">
-                        No
-                      </button>
-                      <button onClick={() => answerFollowUp(index, "Not sure")} className="followup-btn followup-maybe">
-                        Not sure
-                      </button>
-                    </div>
-                  </div>
-                ),
-            )}
-          </div>
-        </div>
-      )}
-
       {/* Chat Box */}
       <div className="chat-container">
         <div className="chat-header">
@@ -314,7 +259,6 @@ export default function MedAI() {
                   <div className="message-false-alarm-badge">😅 False Alarm Detected</div>
                 )}
                 {message.content}
-                {message.isFollowUp && <div className="message-followup-badge">🎯 Follow-up Analysis</div>}
               </div>
             </div>
           ))}
@@ -337,9 +281,7 @@ export default function MedAI() {
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder={
-              isInFollowUpMode ? "Answer the questions above or describe more symptoms..." : "Describe your symptoms..."
-            }
+            placeholder="Describe your symptoms or health concerns..."
             disabled={isLoading}
             className="input-field"
           />
